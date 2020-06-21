@@ -1,14 +1,60 @@
-import uuidv4 from 'uuid/v4'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+
+const dummy = async () =>{
+    const email = "testmichael@michael.com"
+    const password = "dfdweord1234!"
+    
+    const hashedPassword = "$2a$10$fenO9Sq4O0JRYnDUI7N4iunblyLVttMfWOhpD/kDJh5ovQubGZVKS"
+    const isMatch = await bcrypt.compare(password, hashedPassword)
+    console.log(isMatch)
+}
+dummy()
 
 const Mutation = {
     async createUser(parent, args, {prisma}, info){
-        const emailTaken = await prisma.exists.User({ email:args.data.email })
+        if (args.data.password.length < 8){
+            throw new Error('Password must be 8 or longer')
+        }
         
-        if (emailTaken){
-            throw new Error('Email taken.')
+        const password = await bcrypt.hash(args.data.password, 10)
+        // const emailTaken = await prisma.exists.User({ email:args.data.email })
+        
+        // if (emailTaken){
+        //     throw new Error('Email taken.')
+        // }
+
+        const user = await prisma.mutation.createUser({ 
+            data: {
+                ...args.data ,
+                password
+            }
+        })
+
+        return {
+            user,
+            token: jwt.sign({ userId: user.id }, 'thisissecret')
         }
 
-        return prisma.mutation.createUser({ data: args.data }, info)
+    },
+    async login(parent, args, { prisma }, info){
+        const user = await prisma.query.user({
+            where: {
+                email: args.data.email
+            }
+        })
+        if (!user){
+            throw new Error('unable to login')
+        }
+
+        const isMatch = await bcrypt.compare(args.data.password, user.password)
+        if (!isMatch){
+            throw new Error('unable to login')
+        }
+        return {
+            user,
+            token: jwt.sign({userId: user.id}, 'thisissecret')
+        }
     },
     async deleteUser(parent, args, {prisma}, info){
         const userExists = await prisma.exists.User({ id: args.id })
